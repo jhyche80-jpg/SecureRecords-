@@ -1,15 +1,11 @@
 const router = require('express').Router();
-const { Note } = require('../../models');
+const { Note } = require('../../models/Note');
 const { authMiddleware } = require('../../utils/auth');
 
-// Apply authMiddleware to all routes in this file
 router.use(authMiddleware);
 
-// GET /api/notes - Get all notes for the logged-in user
-// THIS IS THE ROUTE THAT CURRENTLY HAS THE FLAW
+// GET /api/notes - Get all notes for logged-in user
 router.get('/', async (req, res) => {
-    // This currently finds all notes in the database.
-    // It should only find notes owned by the logged in user.
     try {
         const notes = await Note.find({ user: req.user._id });
         res.json(notes);
@@ -22,8 +18,9 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         const note = await Note.create({
-            ...req.body, user: req.user._id
-            // The user ID needs to be added here
+            title: req.body.title,
+            content: req.body.content,
+            user: req.user._id
         });
         res.status(201).json(note);
     } catch (err) {
@@ -31,42 +28,59 @@ router.post('/', async (req, res) => {
     }
 });
 
-// PUT /api/notes/:id - Update a note
+// PUT /api/notes/:id - Update a note (owner only)
 router.put('/:id', async (req, res) => {
     try {
-        // This needs an authorization check
-        const note = await Note.findByIdAndUpdate({ _id: req.params.id, user: req.user._id }, req.body, { new: true });
+        const note = await Note.findOneAndUpdate(
+            { _id: req.params.id, user: req.user._id },
+            req.body,
+            { new: true, runValidators: true }
+        );
+
         if (!note) {
-            return res.status(404).json({ message: 'No note found with this id!' });
+            return res.status(404).json({ message: 'Note not found or unauthorized' });
         }
+
         res.json(note);
     } catch (err) {
         res.status(500).json(err);
     }
 });
 
-// DELETE /api/notes/:id - Delete a note
+// DELETE /api/notes/:id - Delete a note (owner only)
 router.delete('/:id', async (req, res) => {
     try {
-        // This needs an authorization check
-        const note = await Note.findByIdAndDelete({ _id: req.params.id, user: req.user._id });
+        const note = await Note.findOneAndDelete({
+            _id: req.params.id,
+            user: req.user._id
+        });
+
         if (!note) {
-            return res.status(404).json({ message: 'No note found with this id!' });
+            return res.status(404).json({ message: 'Note not found or unauthorized' });
         }
+
         res.json({ message: 'Note deleted!' });
     } catch (err) {
         res.status(500).json(err);
     }
 });
 
-//GET api/notes/:id - get a single note 
+// GET /api/notes/:id - Get a single note (owner only)
 router.get('/:id', async (req, res) => {
     try {
-        const note = await Note.findByID({ _id: req.params.id, user: req.user._id })
-        res.json(note)
-    } catch (error) {
-        res.status(500).json(error)
+        const note = await Note.findOne({
+            _id: req.params.id,
+            user: req.user._id
+        });
+
+        if (!note) {
+            return res.status(404).json({ message: 'Note not found or unauthorized' });
+        }
+
+        res.json(note);
+    } catch (err) {
+        res.status(500).json(err);
     }
-})
+});
 
 module.exports = router;
